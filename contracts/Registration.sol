@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-// Interface to interact with the automatically generated snarkjs Verifier
+// Minimal interface for the snarkjs-generated Groth16Verifier contract
 interface IVerifier {
     function verifyProof(
         uint[2] calldata _pA,
@@ -11,13 +11,14 @@ interface IVerifier {
     ) external view returns (bool);
 }
 
+// ZK-SNARK based anonymous authentication — proves Merkle membership without revealing identity
 contract ZkRegistration {
     IVerifier public verifier;
-    
-    // The current valid state of the Merkle Tree
+
+    // The Merkle root representing the current registered user set
     uint256 public currentRoot;
-    
-    // Anti-replay mechanism: Track which proofs have already been used
+
+    // Tracks spent nullifier hashes to block proof replay attacks
     mapping(uint256 => bool) public usedNullifiers;
 
     event UserRegistered(uint256 commitment);
@@ -28,14 +29,13 @@ contract ZkRegistration {
         currentRoot = _initialRoot;
     }
 
-    // In a full production app, you calculate the new Merkle root on-chain here 
-    // using a Poseidon smart contract, or off-chain via a relayer. 
-    // For this module, we will allow updating the root directly to test the ZK verification.
+    // Updates the Merkle root after a new commitment is inserted.
+    // TODO: Restrict to an authorised operator or use on-chain Merkle insertion in production.
     function updateRoot(uint256 _newRoot) external {
         currentRoot = _newRoot;
     }
 
-    // The core authentication function
+    // Authenticates a user by verifying their Groth16 ZK proof on-chain.
     function authenticate(
         uint[2] calldata _pA,
         uint[2][2] calldata _pB,
@@ -43,25 +43,24 @@ contract ZkRegistration {
         uint256 _nullifierHash,
         uint256 _merkleRoot
     ) external {
-        // 1. Check that the user is proving against the correct tree state
+        // Reject proofs generated against a stale Merkle root
         require(_merkleRoot == currentRoot, "Invalid Merkle Root");
-        
-        // 2. Prevent replay attacks (Nullifier check)
+
+        // Reject replay: each nullifier can only be spent once
         require(!usedNullifiers[_nullifierHash], "Proof already used!");
 
-        // 3. Assemble the public signals array. 
-        // IMPORTANT: We must match the exact order outputted by Circom.
+        // Order must match Circom's public signal output: [nullifierHash, merkleRoot]
         uint[2] memory pubSignals = [_nullifierHash, _merkleRoot];
 
-        // 4. Verify the Groth16 proof using the snarkjs contract
+        // Delegate cryptographic verification to the snarkjs Groth16 verifier (BN254 pairings)
         require(
             verifier.verifyProof(_pA, _pB, _pC, pubSignals),
             "Invalid Zero Knowledge Proof"
         );
 
-        // 5. Mark the nullifier as spent so this exact proof can never be used again
+        // Mark nullifier as spent — proof cannot be replayed after this point
         usedNullifiers[_nullifierHash] = true;
-        
+
         emit UserAuthenticated(_nullifierHash);
     }
 }

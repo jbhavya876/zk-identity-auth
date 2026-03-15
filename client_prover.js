@@ -1,3 +1,6 @@
+// CLI script that generates a Groth16 ZK proof entirely in Node.js (no browser).
+// Simulates the user as leaf 0 in an empty 20-level Poseidon Merkle tree,
+// then formats the proof for direct submission to the ZkRegistration smart contract.
 import * as snarkjs from "snarkjs";
 import { buildPoseidon } from "circomlibjs";
 
@@ -5,19 +8,17 @@ async function generateClientProof() {
     console.log("1. Initializing Cryptography (Poseidon Hash)...");
     const poseidon = await buildPoseidon();
 
-    // 1. The User's Secrets (These stay on the device!)
+    // DEVELOPMENT ONLY — use securely random BigInts in production
     const nullifier = 12345n;
-    const trapdoor = 67890n;
+    const trapdoor  = 67890n;
 
-    // Calculate the user's commitment
+    // commitment = Poseidon(nullifier, trapdoor) — the Merkle leaf
     const commitment = poseidon([nullifier, trapdoor]);
 
     console.log("2. Fetching Merkle Tree State...");
-    // 2. Reconstruct the Merkle Tree path locally
-    // In a real dApp, you would fetch the leaves from the blockchain or an indexer.
-    // Here, we simulate the same empty 20-level tree we used in testing.
+    // Simulate an empty 20-level tree; in production, fetch real path from an indexer
     let pathElements = [];
-    let pathIndices = [];
+    let pathIndices  = [];
     let currentLevelHash = commitment;
     const zeroHash = poseidon.F.e(0);
 
@@ -30,24 +31,23 @@ async function generateClientProof() {
     const root = poseidon.F.toObject(currentLevelHash).toString();
 
     const input = {
-        root: root,
+        root,
         nullifier: nullifier.toString(),
-        trapdoor: trapdoor.toString(),
-        pathElements: pathElements,
-        pathIndices: pathIndices
+        trapdoor:  trapdoor.toString(),
+        pathElements,
+        pathIndices
     };
 
     console.log("3. Generating Zero-Knowledge Proof Dynamically...");
-    // 3. Point to the WASM and ZKEY files hosted on your "frontend"
     const wasmPath = "./build/registration_js/registration.wasm";
     const zkeyPath = "./registration_final.zkey";
 
-    // This single function calculates the witness AND generates the proof
+    // fullProve computes the witness and generates the Groth16 proof in one call
     const { proof, publicSignals } = await snarkjs.groth16.fullProve(input, wasmPath, zkeyPath);
 
     console.log("4. Formatting Proof for EVM Calldata...");
-    // 4. Format the output so Ethers.js can send it straight to Solidity
     const pA = [proof.pi_a[0], proof.pi_a[1]];
+    // EVM requires G2 point sub-arrays to be reversed compared to snarkjs output
     const pB = [
         [proof.pi_b[0][1], proof.pi_b[0][0]],
         [proof.pi_b[1][1], proof.pi_b[1][0]]
@@ -64,7 +64,6 @@ async function generateClientProof() {
     return { pA, pB, pC, publicSignals };
 }
 
-// Execute the function
 generateClientProof()
     .then(() => process.exit(0))
     .catch((error) => {

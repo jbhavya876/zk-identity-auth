@@ -1,39 +1,39 @@
+// Generates input.json for the RegistrationAuth(20) circuit.
+// Simulates the user as leaf 0 in an empty 20-level Poseidon Merkle tree.
 const { buildPoseidon } = require("circomlibjs");
 const fs = require("fs");
 
 async function run() {
     const poseidon = await buildPoseidon();
 
-    // 1. Generate random secrets (Keep these safe in a real app!)
-    const nullifier = 12345n; 
-    const trapdoor = 67890n;  
+    // DEVELOPMENT ONLY — use securely random BigInts in production
+    const nullifier = 12345n;
+    const trapdoor  = 67890n;
 
-    // 2. Calculate Commitment
+    // commitment = Poseidon(nullifier, trapdoor) — this becomes the Merkle leaf
     const commitmentF = poseidon([nullifier, trapdoor]);
 
-    // 3. Simulate a 20-level Merkle tree (Index 0, all siblings are 0)
+    // Build Merkle path for leaf at index 0; all siblings are Poseidon(0) (empty subtrees)
     let pathElements = [];
-    let pathIndices = [];
+    let pathIndices  = [];
     let currentLevelHash = commitmentF;
     const zeroHash = poseidon.F.e(0);
 
     for (let i = 0; i < 20; i++) {
         pathElements.push(poseidon.F.toObject(zeroHash).toString());
-        pathIndices.push(0); // 0 means sibling is on the right
-        
-        // Hash current level with the zero sibling
+        pathIndices.push(0); // 0 = left child at every level
         currentLevelHash = poseidon([currentLevelHash, zeroHash]);
     }
 
     const root = poseidon.F.toObject(currentLevelHash);
 
-    // 4. Create the input object
+    // Write circuit input as decimal strings (required by snarkjs witness generator)
     const input = {
-        root: root.toString(),
-        nullifier: nullifier.toString(),
-        trapdoor: trapdoor.toString(),
+        root:         root.toString(),
+        nullifier:    nullifier.toString(),
+        trapdoor:     trapdoor.toString(),
         pathElements: pathElements,
-        pathIndices: pathIndices
+        pathIndices:  pathIndices
     };
 
     fs.writeFileSync("input.json", JSON.stringify(input, null, 2));

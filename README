@@ -1,0 +1,61 @@
+# ZK Identity Authentication System
+
+A privacy-preserving authentication protocol using zk-SNARKs on Ethereum.
+
+## Architecture
+
+- Circom circuits for Merkle inclusion proofs
+- Groth16 proof generation using snarkjs
+- Poseidon-based identity commitments
+- Solidity verifier contract
+- Replay protection via nullifiers
+
+## Stack
+
+- Circom
+- snarkjs
+- Solidity
+- Hardhat
+- Poseidon hash
+- Groth16 zk-SNARK
+
+## Features
+
+- Anonymous authentication
+- Merkle tree membership proof
+- Replay protection with nullifiers
+- On-chain proof verification
+
+## Workflow
+
+1. User generates identity (nullifier + trapdoor)
+2. Commitment inserted into Merkle tree
+3. Client generates zk-proof locally
+4. Proof verified on-chain
+
+User
+ │
+ │ generate identity
+ ▼
+Commitment = Poseidon(nullifier, trapdoor)
+ │
+ ▼
+Ethereum Contract
+ │
+ │ Merkle Tree
+ ▼
+User generates proof
+ │
+ ▼
+Groth16 verification
+ │
+ ▼
+Access granted
+
+
+## Future Improvements
+
+- Incremental Merkle Trees
+- MPC trusted setup
+- Relayer infrastructure
+- Indexer integration
